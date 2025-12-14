@@ -1,0 +1,285 @@
+version: '3.8'
+
+services:
+  # ==================== Databases & Infrastructure ====================
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: smartscreen-postgres
+    environment:
+      POSTGRES_USER: smartscreen
+      POSTGRES_PASSWORD: dev_password_123
+      POSTGRES_DB: smartscreen
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U smartscreen" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - smartscreen-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: smartscreen-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - smartscreen-network
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: smartscreen-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: smartscreen
+      RABBITMQ_DEFAULT_PASS: dev_password_123
+    ports:
+      - "5672:5672" # AMQP
+      - "15672:15672" # Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "ping" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - smartscreen-network
+
+  minio:
+    image: minio/minio:latest
+    container_name: smartscreen-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: smartscreen
+      MINIO_ROOT_PASSWORD: dev_password_123
+    ports:
+      - "9000:9000" # API
+      - "9001:9001" # Console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - smartscreen-network
+
+  # ==================== Microservices ====================
+
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
+    container_name: smartscreen-api-gateway
+    environment:
+      DATABASE_URL: postgresql://smartscreen:dev_password_123@postgres:5432/smartscreen
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://smartscreen:dev_password_123@rabbitmq:5672
+      JWT_SECRET: dev_jwt_secret_change_in_production
+      FORMS_SERVICE_URL: http://forms-service:8001
+      PLAGIARISM_SERVICE_URL: http://plagiarism-service:8002
+      AI_DETECTION_SERVICE_URL: http://ai-detection:8003
+      RANKING_SERVICE_URL: http://ranking-service:8004
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./services/api-gateway:/app
+    networks:
+      - smartscreen-network
+    restart: unless-stopped
+
+  forms-service:
+    build:
+      context: ./services/forms-service
+      dockerfile: Dockerfile
+    container_name: smartscreen-forms-service
+    environment:
+      DATABASE_URL: postgresql://smartscreen:dev_password_123@postgres:5432/smartscreen
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://smartscreen:dev_password_123@rabbitmq:5672
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: smartscreen
+      MINIO_SECRET_KEY: dev_password_123
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID}
+      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET}
+    ports:
+      - "8001:8001"
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+      - minio
+    volumes:
+      - ./services/forms-service:/app
+    networks:
+      - smartscreen-network
+    restart: unless-stopped
+
+  # Commented out - Not yet fully implemented
+  # plagiarism-service:
+  #   build:
+  #     context: ./services/plagiarism-service
+  #     dockerfile: Dockerfile
+  #   container_name: smartscreen-plagiarism-service
+  #   environment:
+  #     DATABASE_URL: postgresql://smartscreen:dev_password_123@postgres:5432/smartscreen
+  #     REDIS_URL: redis://redis:6379
+  #     RUST_LOG: info
+  #   ports:
+  #     - "8002:8002"
+  #   depends_on:
+  #     - postgres
+  #     - redis
+  #   volumes:
+  #     - ./services/plagiarism-service:/app
+  #   networks:
+  #     - smartscreen-network
+  #   restart: unless-stopped
+
+  # file-processing:
+  #   build:
+  #     context: ./services/file-processing
+  #     dockerfile: Dockerfile
+  #   container_name: smartscreen-file-processing
+  #   environment:
+  #     MINIO_ENDPOINT: minio:9000
+  #     MINIO_ACCESS_KEY: smartscreen
+  #     MINIO_SECRET_KEY: dev_password_123
+  #     RABBITMQ_URL: amqp://smartscreen:dev_password_123@rabbitmq:5672
+  #   ports:
+  #     - "8005:8005"
+  #   depends_on:
+  #     - minio
+  #     - rabbitmq
+  #   volumes:
+  #     - ./services/file-processing:/app
+  #   networks:
+  #     - smartscreen-network
+  #   restart: unless-stopped
+
+  # ai-detection:
+  #   build:
+  #     context: ./services/ai-detection
+  #     dockerfile: Dockerfile
+  #   container_name: smartscreen-ai-detection
+  #   environment:
+  #     REDIS_URL: redis://redis:6379
+  #     GPTZERO_API_KEY: ${GPTZERO_API_KEY}
+  #   ports:
+  #     - "8003:8003"
+  #   depends_on:
+  #     - redis
+  #   volumes:
+  #     - ./services/ai-detection:/app
+  #   networks:
+  #     - smartscreen-network
+  #   restart: unless-stopped
+
+  # ranking-service:
+  #   build:
+  #     context: ./services/ranking-service
+  #     dockerfile: Dockerfile
+  #   container_name: smartscreen-ranking-service
+  #   environment:
+  #     DATABASE_URL: postgresql://smartscreen:dev_password_123@postgres:5432/smartscreen
+  #     REDIS_URL: redis://redis:6379
+  #   ports:
+  #     - "8004:8004"
+  #   depends_on:
+  #     - postgres
+  #     - redis
+  #   volumes:
+  #     - ./services/ranking-service:/app
+  #   networks:
+  #     - smartscreen-network
+  #   restart: unless-stopped
+
+  # notification-service:
+  #   build:
+  #     context: ./services/notification-service
+  #     dockerfile: Dockerfile
+  #   container_name: smartscreen-notification-service
+  #   environment:
+  #     REDIS_URL: redis://redis:6379
+  #     RABBITMQ_URL: amqp://smartscreen:dev_password_123@rabbitmq:5672
+  #     SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+  #     SMTP_PORT: ${SMTP_PORT:-587}
+  #     SMTP_USER: ${SMTP_USER}
+  #     SMTP_PASSWORD: ${SMTP_PASSWORD}
+  #   ports:
+  #     - "3001:3001"
+  #   depends_on:
+  #     - redis
+  #     - rabbitmq
+  #   volumes:
+  #     - ./services/notification-service:/app
+  #   networks:
+  #     - smartscreen-network
+  #   restart: unless-stopped
+
+  # ==================== Frontend ====================
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: smartscreen-frontend
+    environment:
+      VITE_API_URL: http://localhost:8000
+      VITE_WS_URL: ws://localhost:3001
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - smartscreen-network
+    restart: unless-stopped
+
+  # ==================== Nginx Reverse Proxy ====================
+
+  nginx:
+    image: nginx:alpine
+    container_name: smartscreen-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api-gateway
+      - frontend
+    networks:
+      - smartscreen-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+  minio_data:
+
+
+networks:
+  smartscreen-network:
+    driver: bridge

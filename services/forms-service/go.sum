@@ -1,0 +1,4 @@
+# Placeholder for Go module
+module smartscreen/forms-service
+
+go 1.21
