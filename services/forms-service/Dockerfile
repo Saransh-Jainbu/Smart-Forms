@@ -2,20 +2,18 @@ FROM golang:1.21-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies
-COPY go.mod go.sum ./
-RUN go mod download
-
-# Copy source code
+# Copy source
 COPY . .
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o forms-service .
+# Download dependencies and generate go.sum, then build
+RUN go mod tidy && \
+  go mod download && \
+  CGO_ENABLED=0 GOOS=linux go build -o forms-service .
 
 # Final stage
 FROM alpine:latest
 
-RUN apk --no-cache add ca-certificates
+RUN apk --no-cache add ca-certificates wget
 
 WORKDIR /root/
 

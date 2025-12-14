@@ -1,14 +1,6 @@
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use rayon::prelude::*;
-use unicode_segmentation::UnicodeSegmentation;
-
-mod tfidf;
-mod similarity;
-
-use tfidf::TfIdfCalculator;
-use similarity::cosine_similarity;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct AnalyzeRequest {
@@ -72,28 +64,33 @@ async fn analyze_plagiarism(req: web::Json<AnalyzeRequest>) -> impl Responder {
 
     let compare_texts = req.compare_with.as_ref().unwrap();
 
-    // Calculate TF-IDF vectors in parallel
-    let calculator = TfIdfCalculator::new();
-    let main_vector = calculator.calculate(&req.text);
+    // Simple word-based similarity (basic implementation)
+    let main_words: Vec<&str> = req.text.split_whitespace().collect();
+    
+    let mut matches: Vec<Match> = vec![];
+    
+    for compare in compare_texts {
+        let compare_words: Vec<&str> = compare.text.split_whitespace().collect();
+        
+        // Calculate simple word overlap
+        let common_words: usize = main_words.iter()
+            .filter(|w| compare_words.contains(w))
+            .count();
+        
+        let similarity = if main_words.len() > 0 {
+            (common_words as f64 / main_words.len() as f64) * 100.0
+        } else {
+            0.0
+        };
 
-    // Compare with all other submissions in parallel
-    let matches: Vec<Match> = compare_texts
-        .par_iter()
-        .map(|compare| {
-            let compare_vector = calculator.calculate(&compare.text);
-            let similarity = cosine_similarity(&main_vector, &compare_vector);
-            
-            // Find matching phrases (simple n-gram matching)
-            let matched_phrases = find_matching_phrases(&req.text, &compare.text);
-
-            Match {
+        if similarity > 10.0 {
+            matches.push(Match {
                 matched_id: compare.id.clone(),
-                similarity_percentage: similarity * 100.0,
-                matched_phrases,
-            }
-        })
-        .filter(|m| m.similarity_percentage > 10.0) // Only include significant matches
-        .collect();
+                similarity_percentage: similarity,
+                matched_phrases: vec![],
+            });
+        }
+    }
 
     // Calculate overall similarity score (highest match)
     let max_similarity = matches
@@ -101,7 +98,7 @@ async fn analyze_plagiarism(req: web::Json<AnalyzeRequest>) -> impl Responder {
         .map(|m| m.similarity_percentage)
         .fold(0.0, f64::max);
 
-    let is_plagiarized = max_similarity > 70.0; // Threshold for plagiarism
+    let is_plagiarized = max_similarity > 70.0;
 
     let processing_time = start_time.elapsed().as_millis();
     log::info!(
@@ -119,31 +116,6 @@ async fn analyze_plagiarism(req: web::Json<AnalyzeRequest>) -> impl Responder {
         matches,
         processing_time_ms: processing_time,
     })
-}
-
-/// Find matching phrases between two texts (simple n-gram approach)
-fn find_matching_phrases(text1: &str, text2: &str) -> Vec<String> {
-    let words1: Vec<&str> = text1.unicode_words().collect();
-    let words2: Vec<&str> = text2.unicode_words().collect();
-    
-    let mut matches = Vec::new();
-    let n = 5; // 5-gram matching
-
-    for i in 0..words1.len().saturating_sub(n) {
-        let phrase1 = words1[i..i + n].join(" ");
-        
-        for j in 0..words2.len().saturating_sub(n) {
-            let phrase2 = words2[j..j + n].join(" ");
-            
-            if phrase1.to_lowercase() == phrase2.to_lowercase() {
-                matches.push(phrase1.clone());
-                break;
-            }
-        }
-    }
-
-    matches.truncate(10); // Limit to top 10 matches
-    matches
 }
 
 #[actix_web::main]

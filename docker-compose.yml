@@ -113,49 +113,31 @@ services:
       dockerfile: Dockerfile
     container_name: smartscreen-forms-service
     environment:
+      PORT: "8001"
       DATABASE_URL: postgresql://smartscreen:dev_password_123@postgres:5432/smartscreen
       REDIS_URL: redis://redis:6379
-      RABBITMQ_URL: amqp://smartscreen:dev_password_123@rabbitmq:5672
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: smartscreen
-      MINIO_SECRET_KEY: dev_password_123
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
-      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID}
-      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET}
     ports:
       - "8001:8001"
     depends_on:
       - postgres
       - redis
-      - rabbitmq
-      - minio
-    volumes:
-      - ./services/forms-service:/app
     networks:
       - smartscreen-network
     restart: unless-stopped
 
-  # Commented out - Not yet fully implemented
-  # plagiarism-service:
-  #   build:
-  #     context: ./services/plagiarism-service
-  #     dockerfile: Dockerfile
-  #   container_name: smartscreen-plagiarism-service
-  #   environment:
-  #     DATABASE_URL: postgresql://smartscreen:dev_password_123@postgres:5432/smartscreen
-  #     REDIS_URL: redis://redis:6379
-  #     RUST_LOG: info
-  #   ports:
-  #     - "8002:8002"
-  #   depends_on:
-  #     - postgres
-  #     - redis
-  #   volumes:
-  #     - ./services/plagiarism-service:/app
-  #   networks:
-  #     - smartscreen-network
-  #   restart: unless-stopped
+  plagiarism-service:
+    build:
+      context: ./services/plagiarism-service
+      dockerfile: Dockerfile
+    container_name: smartscreen-plagiarism-service
+    environment:
+      PORT: "8002"
+      RUST_LOG: info
+    ports:
+      - "8002:8002"
+    networks:
+      - smartscreen-network
+    restart: unless-stopped
 
   # file-processing:
   #   build:
