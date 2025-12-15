@@ -24,11 +24,20 @@ export default function Login({ onLogin }: LoginProps) {
                 password
             })
 
+            // Both register and login now return access_token
             if (response.data.access_token) {
                 onLogin(email, response.data.access_token)
+            } else {
+                setError('Authentication successful but no token received')
             }
         } catch (err: any) {
-            setError(err.response?.data?.error || 'Authentication failed')
+            if (err.response?.status === 429) {
+                setError('Too many attempts. Please wait a minute and try again.')
+            } else if (err.response?.data?.detail) {
+                setError(err.response.data.detail)
+            } else {
+                setError('Authentication failed. Please try again.')
+            }
         } finally {
             setLoading(false)
         }

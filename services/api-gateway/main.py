@@ -83,27 +83,42 @@ async def root():
 @limiter.limit("5/minute")
 async def register(request: Request, data: RegisterRequest):
     """Register a new user"""
-    # TODO: Implement user registration
-    # - Hash password
-    # - Store in database
-    # - Send verification email
-    logger.info(f"Registration attempt for email: {data.email}")
+    from auth import register_user
     
-    return {
-        "message": "Registration successful",
-        "email": data.email
-    }
+    try:
+        logger.info(f"Registration attempt for email: {data.email}")
+        user = register_user(data.email, data.password)
+        access_token = create_access_token({"sub": data.email})
+        
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "message": "Registration successful"
+        }
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.error(f"Registration error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Registration failed"
+        )
 
 @app.post("/api/auth/login")
 @limiter.limit("10/minute")
 async def login(request: Request, data: LoginRequest):
     """Login and get JWT token"""
-    # TODO: Implement authentication
-    # - Verify credentials
-    # - Generate JWT token
+    from auth import authenticate_user
+    
     logger.info(f"Login attempt for email: {data.email}")
     
-    # Mock response for now
+    user = authenticate_user(data.email, data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password"
+        )
+    
     access_token = create_access_token({"sub": data.email})
     
     return {

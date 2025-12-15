@@ -25,36 +25,39 @@ export default function Dashboard({ user, onLogout, onViewForm }: DashboardProps
     }, [])
 
     const loadForms = async () => {
+        setLoading(true)
         try {
-            // Mock data for now - will connect to real API
-            setTimeout(() => {
-                setForms([
-                    {
-                        id: '1',
-                        title: 'Software Engineer Applications 2024',
-                        platform: 'Google Forms',
-                        submissions: 247,
-                        lastSync: '2 minutes ago'
-                    },
-                    {
-                        id: '2',
-                        title: 'Marketing Intern Screening',
-                        platform: 'Google Forms',
-                        submissions: 89,
-                        lastSync: '1 hour ago'
-                    }
-                ])
-                setLoading(false)
-            }, 500)
+            const response = await axios.get('http://localhost:8001/forms', {
+                headers: {
+                    'Authorization': `Bearer ${user.token}`
+                }
+            })
+
+            if (response.data.forms) {
+                setForms(response.data.forms)
+            }
         } catch (error) {
             console.error('Failed to load forms:', error)
+            // If API fails, show empty state instead of mock data
+            setForms([])
+        } finally {
             setLoading(false)
         }
     }
 
-    const handleConnectGoogle = () => {
-        // Will implement Google OAuth
-        alert('Google Forms integration coming soon!')
+    const handleConnectGoogle = async () => {
+        try {
+            const response = await axios.post('http://localhost:8001/connect/google', {}, {
+                headers: {
+                    'Authorization': `Bearer ${user.token}`
+                }
+            })
+            alert(response.data.message || 'Google Forms connection initiated!')
+            loadForms() // Reload forms after connecting
+        } catch (error) {
+            console.error('Failed to connect Google Forms:', error)
+            alert('Failed to connect Google Forms. Please try again.')
+        }
         setShowConnectModal(false)
     }
 
@@ -78,10 +81,18 @@ export default function Dashboard({ user, onLogout, onViewForm }: DashboardProps
 
             {/* Stats */}
             <div className="max-w-7xl mx-auto grid md:grid-cols-4 gap-6 mb-8">
-                <StatCard title="Total Forms" value="2" icon="📋" />
-                <StatCard title="Submissions" value="336" icon="📝" />
-                <StatCard title="Flagged" value="12" icon="🚩" />
-                <StatCard title="Analyzed" value="324" icon="✅" />
+                <StatCard title="Total Forms" value={forms.length.toString()} icon="📋" />
+                <StatCard
+                    title="Submissions"
+                    value={forms.reduce((acc, form) => acc + (form.submissions || 0), 0).toString()}
+                    icon="📝"
+                />
+                <StatCard title="Flagged" value="0" icon="🚩" />
+                <StatCard
+                    title="Analyzed"
+                    value={forms.reduce((acc, form) => acc + (form.submissions || 0), 0).toString()}
+                    icon="✅"
+                />
             </div>
 
             {/* Forms List */}

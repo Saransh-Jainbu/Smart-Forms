@@ -29,68 +29,37 @@ export default function FormAnalysis({ formId, user, onBack }: FormAnalysisProps
     }, [formId])
 
     const loadSubmissions = async () => {
-        // Mock data - will connect to real API
-        setTimeout(() => {
-            const mockData: Submission[] = [
-                {
-                    id: '1',
-                    name: 'John Doe',
-                    email: 'john@example.com',
-                    submittedAt: '2024-12-14 10:30 AM',
-                    plagiarismScore: 5,
-                    aiScore: 12,
-                    qualityScore: 92,
-                    rank: 1,
-                    status: 'clean'
-                },
-                {
-                    id: '2',
-                    name: 'Jane Smith',
-                    email: 'jane@example.com',
-                    submittedAt: '2024-12-14 11:15 AM',
-                    plagiarismScore: 78,
-                    aiScore: 85,
-                    qualityScore: 45,
-                    rank: 2,
-                    status: 'flagged'
-                },
-                {
-                    id: '3',
-                    name: 'Bob Johnson',
-                    email: 'bob@example.com',
-                    submittedAt: '2024-12-14 12:00 PM',
-                    plagiarismScore: 35,
-                    aiScore: 15,
-                    qualityScore: 78,
-                    rank: 3,
-                    status: 'warning'
-                },
-                {
-                    id: '4',
-                    name: 'Alice Williams',
-                    email: 'alice@example.com',
-                    submittedAt: '2024-12-14 01:45 PM',
-                    plagiarismScore: 8,
-                    aiScore: 10,
-                    qualityScore: 88,
-                    rank: 4,
-                    status: 'clean'
-                },
-                {
-                    id: '5',
-                    name: 'Charlie Brown',
-                    email: 'charlie@example.com',
-                    submittedAt: '2024-12-14 02:30 PM',
-                    plagiarismScore: 92,
-                    aiScore: 95,
-                    qualityScore: 25,
-                    rank: 5,
-                    status: 'flagged'
+        setLoading(true)
+        try {
+            const response = await axios.get(`http://localhost:8001/forms/${formId}/responses`, {
+                headers: {
+                    'Authorization': `Bearer ${user.token}`
                 }
-            ]
-            setSubmissions(mockData)
+            })
+
+            if (response.data.responses) {
+                // Transform API response to match our interface
+                const transformedSubmissions: Submission[] = response.data.responses.map((resp: any, index: number) => ({
+                    id: resp.id,
+                    name: resp.name,
+                    email: resp.email,
+                    submittedAt: resp.submittedAt,
+                    plagiarismScore: resp.plagiarismScore || 0,
+                    aiScore: resp.aiScore || 0,
+                    qualityScore: resp.qualityScore || 0,
+                    rank: index + 1,
+                    status: resp.plagiarismScore > 70 || resp.aiScore > 70 ? 'flagged' :
+                        resp.plagiarismScore > 30 || resp.aiScore > 30 ? 'warning' : 'clean'
+                }))
+                setSubmissions(transformedSubmissions)
+            }
+        } catch (error) {
+            console.error('Failed to load submissions:', error)
+            // Show empty state if API fails
+            setSubmissions([])
+        } finally {
             setLoading(false)
-        }, 500)
+        }
     }
 
     const getStatusColor = (status: string) => {
