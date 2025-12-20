@@ -1,11 +1,9 @@
 import os
+import hashlib
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from fastapi import HTTPException, status
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 SECRET_KEY = os.getenv("JWT_SECRET", "dev_jwt_secret_change_in_production")
 ALGORITHM = "HS256"
@@ -15,10 +13,13 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 users_db = {}
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verify password using SHA256"""
+    password_hash = hashlib.sha256(plain_password.encode()).hexdigest()
+    return password_hash == hashed_password
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    """Hash password using SHA256"""
+    return hashlib.sha256(password.encode()).hexdigest()
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()

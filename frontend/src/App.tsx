@@ -1,10 +1,9 @@
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useState } from 'react'
 import './App.css'
+import LandingPage from './pages/LandingPage'
 import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import FormAnalysis from './pages/FormAnalysis'
-
-type Page = 'login' | 'dashboard' | 'analysis'
+import { Dashboard } from './components/Dashboard'
 
 interface User {
     email: string
@@ -12,52 +11,44 @@ interface User {
 }
 
 function App() {
-    const [currentPage, setCurrentPage] = useState<Page>('login')
     const [user, setUser] = useState<User | null>(null)
-    const [selectedFormId, setSelectedFormId] = useState<string | null>(null)
 
     const handleLogin = (email: string, token: string) => {
         setUser({ email, token })
-        setCurrentPage('dashboard')
     }
 
     const handleLogout = () => {
         setUser(null)
-        setCurrentPage('login')
-    }
-
-    const handleViewForm = (formId: string) => {
-        setSelectedFormId(formId)
-        setCurrentPage('analysis')
-    }
-
-    const handleBackToDashboard = () => {
-        setCurrentPage('dashboard')
-        setSelectedFormId(null)
     }
 
     return (
-        <div className="min-h-screen">
-            {currentPage === 'login' && (
-                <Login onLogin={handleLogin} />
-            )}
+        <BrowserRouter>
+            <Routes>
+                {/* Public Routes */}
+                <Route path="/" element={<LandingPage />} />
 
-            {currentPage === 'dashboard' && user && (
-                <Dashboard
-                    user={user}
-                    onLogout={handleLogout}
-                    onViewForm={handleViewForm}
+                {/* Auth Routes */}
+                <Route
+                    path="/login"
+                    element={user ? <Navigate to="/dashboard" /> : <Login onLogin={handleLogin} />}
                 />
-            )}
 
-            {currentPage === 'analysis' && user && selectedFormId && (
-                <FormAnalysis
-                    formId={selectedFormId}
-                    user={user}
-                    onBack={handleBackToDashboard}
+                {/* Protected Routes - Use the professional Dashboard */}
+                <Route
+                    path="/dashboard"
+                    element={
+                        user ? (
+                            <Dashboard />
+                        ) : (
+                            <Navigate to="/login" />
+                        )
+                    }
                 />
-            )}
-        </div>
+
+                {/* Catch all - redirect to landing */}
+                <Route path="*" element={<Navigate to="/" />} />
+            </Routes>
+        </BrowserRouter>
     )
 }
 
