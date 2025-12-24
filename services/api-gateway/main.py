@@ -94,7 +94,16 @@ async def register(request: Request, data: RegisterRequest):
     
     try:
         logger.info(f"Registration attempt for email: {data.email}")
-        user = register_user(data.email, data.password)
+        user = register_user(
+            email=data.email,
+            password=data.password,
+            full_name=data.full_name,
+            organization=data.organization,
+            role=data.role,
+            phone_number=data.phone_number,
+            use_case=data.use_case,
+            organization_size=data.organization_size
+        )
         access_token = create_access_token({"sub": data.email})
         
         return {

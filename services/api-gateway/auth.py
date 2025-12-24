@@ -96,7 +96,9 @@ def decode_access_token(token: str):
     except JWTError:
         return None
 
-def register_user(email: str, password: str) -> dict:
+def register_user(email: str, password: str, full_name: str, organization: str, role: str, 
+                  phone_number: Optional[str] = None, use_case: Optional[str] = None, 
+                  organization_size: Optional[str] = None) -> dict:
     """Register a new user in the database"""
     logger.info(f"Registration attempt for email: {sanitize_for_log(email)}")
     
@@ -129,15 +131,18 @@ def register_user(email: str, password: str) -> dict:
                         detail="Email already registered"
                     )
                 
-                # Create new user
+                # Create new user with all fields
                 hashed_password = get_password_hash(password)
                 cursor.execute(
                     """
-                    INSERT INTO users (email, password_hash, tier, credits)
-                    VALUES (%s, %s, %s, %s)
-                    RETURNING id, email, created_at, tier, credits
+                    INSERT INTO users (email, password_hash, full_name, organization, role, 
+                                     phone_number, use_case, organization_size, tier, credits)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id, email, full_name, organization, role, phone_number, 
+                             use_case, organization_size, created_at, tier, credits
                     """,
-                    (email, hashed_password, DEFAULT_TIER, DEFAULT_CREDITS)
+                    (email, hashed_password, full_name, organization, role, 
+                     phone_number, use_case, organization_size, DEFAULT_TIER, DEFAULT_CREDITS)
                 )
                 
                 user = cursor.fetchone()

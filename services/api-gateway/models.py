@@ -9,6 +9,12 @@ class User(BaseModel):
     """User model"""
     id: int
     email: EmailStr
+    full_name: Optional[str] = None
+    organization: Optional[str] = None
+    role: Optional[str] = None
+    phone_number: Optional[str] = None
+    use_case: Optional[str] = None
+    organization_size: Optional[str] = None
     is_active: bool = True
     is_premium: bool = False
     created_at: Optional[datetime] = None
@@ -16,8 +22,13 @@ class User(BaseModel):
 class RegisterRequest(BaseModel):
     """User registration request"""
     email: EmailStr
-    password: str = Field(..., min_length=8)
-    full_name: Optional[str] = None
+    password: str = Field(..., min_length=10)
+    full_name: str = Field(..., min_length=2, max_length=255)
+    organization: str = Field(..., min_length=2, max_length=255)
+    role: str
+    phone_number: Optional[str] = None
+    use_case: Optional[str] = None
+    organization_size: Optional[str] = None
 
 class LoginRequest(BaseModel):
     """User login request"""
