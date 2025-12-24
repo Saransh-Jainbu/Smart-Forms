@@ -4,13 +4,11 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from fastapi import HTTPException, status
+from database import get_db_connection, get_db_cursor
 
 SECRET_KEY = os.getenv("JWT_SECRET", "dev_jwt_secret_change_in_production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
-
-# In-memory user store (replace with database in production)
-users_db = {}
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify password using SHA256"""
@@ -39,31 +37,53 @@ def decode_access_token(token: str):
         return None
 
 def register_user(email: str, password: str) -> dict:
-    """Register a new user"""
-    if email in users_db:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
+    """Register a new user in the database"""
+    with get_db_connection() as conn:
+        cursor = get_db_cursor(conn)
+        
+        # Check if user already exists
+        cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
+        if cursor.fetchone():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered"
+            )
+        
+        # Create new user
+        hashed_password = get_password_hash(password)
+        cursor.execute(
+            """
+            INSERT INTO users (email, password_hash, tier, credits)
+            VALUES (%s, %s, %s, %s)
+            RETURNING id, email, created_at, tier, credits
+            """,
+            (email, hashed_password, 'free', 100)
         )
-    
-    hashed_password = get_password_hash(password)
-    user = {
-        "email": email,
-        "hashed_password": hashed_password,
-        "created_at": datetime.utcnow().isoformat(),
-        "tier": "free"
-    }
-    users_db[email] = user
-    return user
+        
+        user = cursor.fetchone()
+        cursor.close()
+        
+        return dict(user)
 
 def authenticate_user(email: str, password: str) -> Optional[dict]:
-    """Authenticate a user"""
-    user = users_db.get(email)
-    if not user:
-        return None
-    if not verify_password(password, user["hashed_password"]):
-        return None
-    return user
+    """Authenticate a user from the database"""
+    with get_db_connection() as conn:
+        cursor = get_db_cursor(conn)
+        
+        cursor.execute(
+            "SELECT id, email, password_hash, tier, credits FROM users WHERE email = %s",
+            (email,)
+        )
+        user = cursor.fetchone()
+        cursor.close()
+        
+        if not user:
+            return None
+        
+        if not verify_password(password, user['password_hash']):
+            return None
+        
+        return dict(user)
 
 def get_current_user(token: str) -> dict:
     """Get current user from token"""
@@ -82,11 +102,19 @@ def get_current_user(token: str) -> dict:
             detail="Could not validate credentials"
         )
     
-    user = users_db.get(email)
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
+    with get_db_connection() as conn:
+        cursor = get_db_cursor(conn)
+        cursor.execute(
+            "SELECT id, email, tier, credits FROM users WHERE email = %s",
+            (email,)
         )
-    
-    return user
+        user = cursor.fetchone()
+        cursor.close()
+        
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found"
+            )
+        
+        return dict(user)
