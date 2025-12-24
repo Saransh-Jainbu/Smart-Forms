@@ -44,7 +44,17 @@ export default function Login({ onLogin }: LoginProps) {
             if (err.response?.status === 429) {
                 setError('Too many attempts. Please wait a minute and try again.')
             } else if (err.response?.data?.detail) {
-                setError(err.response.data.detail)
+                // Handle both string and array formats from backend
+                const detail = err.response.data.detail
+                if (typeof detail === 'string') {
+                    setError(detail)
+                } else if (Array.isArray(detail)) {
+                    // Pydantic validation errors (422) - extract the message
+                    const errorMsg = detail.map((err: any) => err.msg || err.message).join(', ')
+                    setError(errorMsg)
+                } else {
+                    setError('Authentication failed. Please try again.')
+                }
             } else {
                 setError('Authentication failed. Please try again.')
             }

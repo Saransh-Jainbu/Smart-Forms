@@ -9,6 +9,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import httpx
+import os
 from contextlib import asynccontextmanager
 import logging
 from typing import Optional
@@ -45,10 +46,11 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS middleware
+# CORS middleware - environment-based origins
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:80"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -59,7 +61,12 @@ app.add_middleware(
 @app.get("/health")
 async def health_check():
     """Health check endpoint for load balancers"""
-    return {"status": "healthy", "service": "api-gateway"}
+    from database import get_pool_status
+    return {
+        "status": "healthy",
+        "service": "api-gateway",
+        "database_pool": get_pool_status()
+    }
 
 @app.get("/ready")
 async def readiness_check():
@@ -127,7 +134,8 @@ async def login(request: Request, data: LoginRequest):
     }
 
 @app.get("/api/auth/me")
-async def get_current_user_info(current_user: User = Depends(get_current_user)):
+@limiter.limit("100/minute")
+async def get_current_user_info(request: Request, current_user: User = Depends(get_current_user)):
     """Get current user information"""
     return current_user
 
